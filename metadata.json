@@ -1,0 +1,8 @@
+{
+  "name": "UPARK",
+  "description": "Aplicativo de mobilidade urbana para localização e reserva de vagas de estacionamento públicas e privadas.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ]
+}
