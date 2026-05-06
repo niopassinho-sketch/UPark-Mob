@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Clock, MapPin, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
@@ -16,7 +17,7 @@ export default function ReservationsView() {
   useEffect(() => {
     const reservaExcedida = reservations.find(r => r.status === 'excedida');
     if (reservaExcedida) {
-      alert('Atenção: Seu tempo expirou. Cobrança de hora adicional iniciada');
+      toast.warning('Atenção: Seu tempo expirou. Cobrança de hora adicional iniciada');
     }
   }, [reservations]);
 
@@ -45,35 +46,30 @@ export default function ReservationsView() {
   };
 
   const handleCancelarReserva = async (res: any) => {
-    console.log('Tentando cancelar reserva:', res.id);
-    
-    const { error } = await supabase.from('reservas').update({ status: 'cancelada' }).eq('id', res.id);
-    
-    if (error) {
-      console.error('Erro ao cancelar:', error);
-      alert('Erro ao cancelar: ' + (error instanceof Error ? error.message : String(error)));
+    const agora = new Date();
+    const horarioCheckin = new Date(res.horario_inicio);
+    console.log('Tentando cancelar reserva id:', res.id);
+
+    // Se já passou do horário de check-in
+    if (agora > horarioCheckin) {
+      toast.error("Atenção: O horário de check-in já passou. Para cancelar, entre em contato com o estacionamento para tratar dos custos.");
       return;
     }
+
+    const { data, error } = await supabase.from('reservas').update({ 
+      status: 'pendente_cancelamento' 
+    }).eq('id', res.id).select();
     
-    // Se a reserva já estava confirmada, precisamos liberar a vaga
-    if (res.status === 'confirmada') {
-      const { data: vaga, error: fetchVagaError } = await supabase
-        .from('vagas_estacionamento')
-        .select('vagas_disponiveis')
-        .eq('id', res.vaga_id)
-        .single();
-        
-      if (!fetchVagaError && vaga) {
-        await supabase
-          .from('vagas_estacionamento')
-          .update({ vagas_disponiveis: vaga.vagas_disponiveis + 1 })
-          .eq('id', res.vaga_id);
-      }
+    if (error) {
+      console.error('Erro ao solicitar cancelamento:', error.message || 'Erro desconhecido');
+      toast.error('Erro ao solicitar cancelamento: ' + (error instanceof Error ? error.message : String(error)));
+      return;
     }
+
+    console.log('Cancelamento solicitado com sucesso para reserva id:', res.id);
     
-    alert('Reserva cancelada com sucesso.');
-    console.log('Chamando fetchReservations após cancelamento...');
-    await fetchReservations(); // Garante que a UI atualize
+    toast.success('Solicitação de cancelamento enviada ao proprietário. Aguardando confirmação.');
+    await fetchReservations();
   };
 
   const handleSolicitarFinalizacao = async (res: any) => {
@@ -101,7 +97,7 @@ export default function ReservationsView() {
       return;
     }
     
-    alert('Solicitação enviada ao proprietário.');
+    toast.success('Solicitação enviada ao proprietário.');
     fetchReservations();
   };
 

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ConfiguradorHorario } from './ConfiguradorHorario';
+import { toast } from 'sonner';
 import { Building, DollarSign, MapPin, Plus, List, CheckCircle, Car, X, ArrowRight, AlertCircle, XCircle, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Map, { Marker, NavigationControl } from 'react-map-gl/maplibre';
@@ -13,6 +14,9 @@ export default function OwnerView() {
   const [spots, setSpots] = useState<any[]>([]);
   const [reservations, setReservations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Track last known cancel pendings to avoid excessive toasts
+  const lastCancelPendings = useRef<string[]>([]);
   
   // Dashboard stats
   const [totalRevenue, setTotalRevenue] = useState(0);
@@ -39,11 +43,14 @@ export default function OwnerView() {
 
   useEffect(() => {
     fetchOwnerData();
+    const interval = setInterval(fetchOwnerData, 10000); // Atualiza a cada 10 segundos
+    return () => clearInterval(interval);
   }, []);
 
   const fetchOwnerData = async () => {
     setLoading(true);
     try {
+      console.log('Iniciando fetchOwnerData...');
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUser(user);
@@ -56,6 +63,7 @@ export default function OwnerView() {
           
         if (spotsData) {
           setSpots(spotsData);
+          console.log('Spots encontrados:', spotsData.length);
           
           // Fetch reservations for these spots
           const spotIds = spotsData.map(s => s.id);
@@ -66,11 +74,30 @@ export default function OwnerView() {
               .in('vaga_id', spotIds);
               
             if (resData) {
+              console.log('Status das reservas:', resData.map(r => r.status));
               setReservations(resData);
+              
+              // New Cancellation Logic
+              const currentPendings = resData
+                .filter(r => r.status === 'pendente_cancelamento')
+                .map(r => r.id);
+              
+              currentPendings.forEach(id => {
+                if (!lastCancelPendings.current.includes(id)) {
+                  toast.warning('Nova solicitação de cancelamento de reserva!', {
+                    description: 'Um motorista solicitou o cancelamento de uma reserva.',
+                    duration: 10000
+                  });
+                }
+              });
+              lastCancelPendings.current = currentPendings;
+
               const revenue = resData
                 .filter(r => r.status === 'confirmada')
                 .reduce((acc, curr) => acc + (Number(curr.valor_total) || 0), 0);
               setTotalRevenue(revenue);
+            } else if (resError) {
+              console.error('Erro ao buscar reservas:', resError);
             }
           }
         }
@@ -126,7 +153,7 @@ export default function OwnerView() {
       setShowRejectionModal(null);
       setRejectionReason('');
     } catch (error: any) {
-      console.error('Erro detalhado:', error);
+      console.error('Erro detalhado:', error.message || 'Erro desconhecido');
       alert('Erro: ' + (error.message || 'Erro desconhecido'));
     }
   };
@@ -237,6 +264,20 @@ export default function OwnerView() {
         <p className="text-slate-500 text-sm">Gerencie seus estacionamentos e ganhos</p>
       </div>
 
+      {/* Alerta de Cancelamento */}
+      {(() => {
+        const pendentes = reservations.filter(r => r.status === 'pendente_cancelamento');
+        return pendentes.length > 0 && (
+          <div className="mb-6 bg-yellow-100 border-l-4 border-yellow-500 p-4 rounded-r-lg flex items-center gap-3">
+            <AlertCircle className="text-yellow-600 shrink-0" size={24} />
+            <div>
+              <p className="font-bold text-yellow-800 text-sm">Cancelamento Pendente</p>
+              <p className="text-yellow-700 text-xs">Você tem {pendentes.length} solicitação(ões) de cancelamento aguardando sua análise.</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Dashboard Cards */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="bg-[#0A192F] rounded-2xl p-4 text-white shadow-md relative overflow-hidden">
@@ -282,12 +323,12 @@ export default function OwnerView() {
           <form onSubmit={handleAddSpot} className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Local</label>
-              <input required type="text" value={newSpot.nome} onChange={e => setNewSpot({...newSpot, nome: e.target.value})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" placeholder="Ex: Estacionamento Central" />
+              <input required type="text" value={newSpot.nome} onChange={e => setNewSpot({...newSpot, nome: e.target.value})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" placeholder="Ex: Estacionamento Central" />
             </div>
             
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Endereço</label>
-              <input required type="text" value={newSpot.endereco} onChange={e => setNewSpot({...newSpot, endereco: e.target.value})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" placeholder="Rua, Número, Bairro" />
+              <input required type="text" value={newSpot.endereco} onChange={e => setNewSpot({...newSpot, endereco: e.target.value})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" placeholder="Rua, Número, Bairro" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -296,17 +337,17 @@ export default function OwnerView() {
                 <input required type="number" min="1" value={newSpot.vagas_totais} onChange={e => {
                   const val = parseInt(e.target.value) || 1;
                   setNewSpot({...newSpot, vagas_totais: val, vagas_disponiveis: val});
-                }} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" />
+                }} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Vagas Disponíveis</label>
-                <input required type="number" min="0" max={newSpot.vagas_totais} value={newSpot.vagas_disponiveis} onChange={e => setNewSpot({...newSpot, vagas_disponiveis: parseInt(e.target.value) || 0})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" />
+                <input required type="number" min="0" max={newSpot.vagas_totais} value={newSpot.vagas_disponiveis} onChange={e => setNewSpot({...newSpot, vagas_disponiveis: parseInt(e.target.value) || 0})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Preço/Hora (R$)</label>
-              <input required type="number" step="0.01" min="0" value={newSpot.preco_hora} onChange={e => setNewSpot({...newSpot, preco_hora: parseFloat(e.target.value) || 0})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" />
+              <input required type="number" step="0.01" min="0" value={newSpot.preco_hora} onChange={e => setNewSpot({...newSpot, preco_hora: parseFloat(e.target.value) || 0})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" />
             </div>
 
             <div>
@@ -495,6 +536,39 @@ export default function OwnerView() {
                       >
                         Confirmar Finalização
                       </button>
+                    )}
+
+                    {res.status === 'pendente_cancelamento' && (
+                      <div className="flex gap-2 pt-2 border-t border-yellow-200">
+                        <button 
+                          onClick={async () => {
+                            // Aceitar: cancela e libera vaga
+                            await supabase.from('reservas').update({ status: 'cancelada' }).eq('id', res.id);
+                            
+                            // Libera vaga
+                            const { data: vaga } = await supabase.from('vagas_estacionamento').select('vagas_disponiveis').eq('id', res.vaga_id).single();
+                            if (vaga) {
+                              await supabase.from('vagas_estacionamento').update({ vagas_disponiveis: vaga.vagas_disponiveis + 1 }).eq('id', res.vaga_id);
+                            }
+                            fetchOwnerData();
+                            alert('Cancelamento aceito.');
+                          }}
+                          className="flex-1 bg-emerald-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-emerald-700"
+                        >
+                          Aceitar Cancelamento
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            // Rejeitar: volta p/ status de confirmada
+                            await supabase.from('reservas').update({ status: 'confirmada' }).eq('id', res.id);
+                            fetchOwnerData();
+                            alert('Cancelamento rejeitado.');
+                          }}
+                          className="flex-1 bg-red-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-red-700"
+                        >
+                          Rejeitar Cancelamento
+                        </button>
+                      </div>
                     )}
 
                     {res.status === 'pendente' && (

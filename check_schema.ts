@@ -6,7 +6,11 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function checkSchema() {
-  const { error } = await supabase.from('usuarios').select('creditos').limit(1);
-  console.log('Select creditos error:', error);
+  const { data, error } = await supabase.from('usuarios').select('id, email').limit(1);
+  if (error) {
+    console.log('Error:', error);
+  } else {
+    console.log('Data:', data);
+  }
 }
 checkSchema();

@@ -50,7 +50,7 @@ export default function LoginView() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A192F] flex flex-col items-center justify-center p-4 text-white">
+    <div className="min-h-screen bg-[#0A192F] flex flex-col items-center justify-center p-4 text-white overflow-y-auto">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <img src="/logo.png" alt="UPARK Logo" className="h-24 object-contain mb-4" onError={(e) => {

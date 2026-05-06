@@ -261,19 +261,19 @@ export default function ProfileView() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Marca</label>
-                <input required type="text" value={newVehicle.marca} onChange={e => setNewVehicle({...newVehicle, marca: e.target.value})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" placeholder="Ex: Honda" />
+                <input required type="text" value={newVehicle.marca} onChange={e => setNewVehicle({...newVehicle, marca: e.target.value})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" placeholder="Ex: Honda" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Modelo</label>
-                <input required type="text" value={newVehicle.modelo} onChange={e => setNewVehicle({...newVehicle, modelo: e.target.value})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" placeholder="Ex: Civic" />
+                <input required type="text" value={newVehicle.modelo} onChange={e => setNewVehicle({...newVehicle, modelo: e.target.value})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" placeholder="Ex: Civic" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Cor</label>
-                <input required type="text" value={newVehicle.cor} onChange={e => setNewVehicle({...newVehicle, cor: e.target.value})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none" placeholder="Ex: Prata" />
+                <input required type="text" value={newVehicle.cor} onChange={e => setNewVehicle({...newVehicle, cor: e.target.value})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" placeholder="Ex: Prata" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">Placa</label>
-                <input required type="text" value={newVehicle.placa} onChange={e => setNewVehicle({...newVehicle, placa: e.target.value.toUpperCase()})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none uppercase" placeholder="ABC1234" />
+                <input required type="text" value={newVehicle.placa} onChange={e => setNewVehicle({...newVehicle, placa: e.target.value.toUpperCase()})} className="w-full p-2 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none uppercase text-slate-900" placeholder="ABC1234" />
               </div>
             </div>
             <button disabled={formLoading} type="submit" className="w-full bg-[#0A192F] text-white font-medium py-2 rounded-lg mt-2 hover:bg-slate-800 transition-colors disabled:opacity-70">

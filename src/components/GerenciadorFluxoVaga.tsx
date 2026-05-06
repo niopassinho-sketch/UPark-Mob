@@ -113,7 +113,7 @@ export const GerenciadorFluxoVaga = ({ reservaId }: Props) => {
           console.warn(errorMessage);
         }
       ).catch(err => {
-        console.error(err);
+        console.error(err.message || 'Erro ao acessar a câmera');
         if (err.name === 'NotAllowedError') {
           setError("Permissão de câmera negada. Por favor, permita o acesso à câmera nas configurações do seu navegador.");
         } else {
@@ -127,7 +127,7 @@ export const GerenciadorFluxoVaga = ({ reservaId }: Props) => {
       if (scannerRef.current) {
         // Only stop if it's currently scanning
         if (scannerRef.current.getState() === 2) { // 2 is SCANNING
-          scannerRef.current.stop().catch(err => console.error(err));
+          scannerRef.current.stop().catch(err => console.error(err.message || 'Erro ao parar scanner'));
         }
         scannerRef.current = null;
       }

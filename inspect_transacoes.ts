@@ -5,15 +5,18 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-async function listTables() {
+async function inspectTransacoes() {
+  // Buscar transações com join explícito e logar o resultado
   const { data, error } = await supabase
-    .from('pg_catalog.pg_tables')
-    .select('tablename')
-    .eq('schemaname', 'public');
+    .from('transacoes')
+    .select('usuario_id, usuarios(id, full_name, email, name)')
+    .limit(5);
+    
   if (error) {
-    console.log('Error:', error);
+    console.log('Error:', error.message);
   } else {
-    console.log('Tables:', data);
+    console.log('Transactions:', JSON.stringify(data, null, 2));
   }
 }
-listTables();
+
+inspectTransacoes();

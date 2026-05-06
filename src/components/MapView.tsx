@@ -3,10 +3,52 @@ import Map, { Marker, Popup, GeolocateControl, Source, Layer } from 'react-map-g
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapPin, Navigation, Clock, ShieldCheck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+
 import { StatusExpediente } from './StatusExpediente';
 import type { MapRef } from 'react-map-gl/maplibre';
 
+// Helper to format elapsed time
+function formatElapsedTime(timestamp: string) {
+  if (!timestamp) return '';
+  const diffInMinutes = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60000);
+  if (diffInMinutes < 60) return `${diffInMinutes} min`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  return `${diffInHours}h`;
+}
+
+// PublicSpotMarker component
+const PublicSpotMarker = ({ spot, isHovered, setHoveredSpot, setSelectedSpot }: any) => {
+  let colorClass = "text-gray-500 fill-gray-100"; // indefinida
+  if (spot.status_ocupacao === 'livre') colorClass = "text-emerald-500 fill-emerald-100";
+  else if (spot.status_ocupacao === 'lotado') colorClass = "text-red-500 fill-red-100";
+
+  return (
+    <div 
+      className="relative cursor-pointer"
+      onClick={(e) => {
+        e.stopPropagation();
+        setSelectedSpot(spot);
+      }}
+      onMouseEnter={() => setHoveredSpot(spot)}
+      onMouseLeave={() => setHoveredSpot(null)}
+    >
+      <MapPin size={36} className={`${colorClass} drop-shadow-md`} />
+      {isHovered && (
+          <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#0A192F] text-white px-2 py-1 rounded text-xs font-bold whitespace-nowrap z-10 pointer-events-none drop-shadow-md flex flex-col items-center">
+            <span>Vaga Pública</span>
+            {spot.status_ocupacao === 'livre' && spot.ultimo_status_em && (
+              <span className="text-[10px] text-emerald-300 font-normal mt-0.5">
+                Livre há {formatElapsedTime(spot.ultimo_status_em)} - Não garantido
+              </span>
+            )}
+          </div>
+      )}
+    </div>
+  );
+};
+
 export default function MapView() {
+
   const [isLocationManual, setIsLocationManual] = useState(false);
   console.log('RENDER: isLocationManual =', isLocationManual);
 
@@ -18,6 +60,7 @@ export default function MapView() {
   });
   const [spots, setSpots] = useState<any[]>([]);
   const [selectedSpot, setSelectedSpot] = useState<any>(null);
+  const [hoveredSpot, setHoveredSpot] = useState<any>(null);
   const [isParked, setIsParked] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [parkedLocation, setParkedLocation] = useState<{lat: number, lng: number} | null>(null);
@@ -99,8 +142,6 @@ export default function MapView() {
   };
 
   const fetchRoute = useCallback(async (origin: {lat: number, lng: number}, destination: {lat: number, lng: number}) => {
-    console.log('Origem da Rota:', origin);
-    console.log('Destino da Rota:', destination);
     try {
       const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`);
       const data = await response.json();
@@ -138,7 +179,6 @@ export default function MapView() {
   }, [userLocation, navigationTarget, fetchRoute]);
 
   const startNavigation = (vaga: any) => {
-    console.log('Iniciando navegação para:', vaga);
     setNavigationTarget(vaga);
     setSelectedSpot(null);
   };
@@ -192,6 +232,8 @@ export default function MapView() {
     const { data, error } = await supabase
       .rpc('get_vagas_com_coordenadas', { p_lat: lat, p_lng: lng });
     
+    console.log('DEBUG EXPEDIENTE UPARK:', data, error);
+
     if (error) {
       console.error('Erro ao buscar vagas:', error);
       return;
@@ -301,52 +343,72 @@ export default function MapView() {
     const loc = userLocation || { lat: viewState.latitude, lng: viewState.longitude };
     setParkedLocation(loc);
     setParkingStartTime(Date.now());
-    alert('Estacionamento público registrado! Você está colaborando com a rede.');
     
     try {
       const user = (await supabase.auth.getUser()).data.user;
       if (user) {
-        const { data, error } = await supabase.from('ocupacoes_publicas').insert([{ 
-          usuario_id: user.id, 
-          lat: loc.lat, 
-          lng: loc.lng 
-        }]).select();
-        if (data && data[0]) setOcupacaoId(data[0].id);
+        const { data, error } = await supabase.rpc('registrar_vaga_publica', {
+          p_lat: loc.lat,
+          p_lng: loc.lng,
+          p_usuario_id: user.id
+        });
+        
+        if (error) {
+           console.error("Erro ao registrar vaga pública:", error);
+           alert("Erro ao registrar vaga pública.");
+           setIsParked(false);
+           return;
+        }
+
+        if (data && data.vaga_id) {
+           setOcupacaoId(data.vaga_id); 
+        }
+        
+        alert('Estacionamento público registrado! Você está colaborando com a rede e a vaga agora consta como ocupada.');
+        fetchSpots(loc.lat, loc.lng); // Refresh map
+      } else {
+        alert('Você precisa estar logado para colaborar e registrar o estacionamento.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("Erro inesperado:", e.message || 'Erro desconhecido');
+      setIsParked(false);
     }
   };
 
   const handleLeave = async () => {
-  try {
-    const user = (await supabase.auth.getUser()).data.user;
-    if (selectedSpot && user) {
-      const { data } = await supabase.rpc('confirmar_saida_com_recompensa', { 
-        p_vaga_id: selectedSpot.id,
-        p_usuario_id: user.id
-      });
-      if (data && data[0]) {
-        alert(data[0].mensagem);
-        localStorage.setItem('points_earned', '10');
+    try {
+      const user = (await supabase.auth.getUser()).data.user;
+      if (selectedSpot && user && selectedSpot.tipo !== 'publica') {
+        const { data } = await supabase.rpc('confirmar_saida_com_recompensa', { 
+          p_vaga_id: selectedSpot.id,
+          p_usuario_id: user.id
+        });
+        if (data && data[0]) {
+          alert(data[0].mensagem);
+          localStorage.setItem('points_earned', '10');
+        }
+      } else if (user && ocupacaoId) {
+        // Free the public spot
+        await supabase.rpc('liberar_vaga_publica', {
+          p_vaga_id: ocupacaoId
+        });
+        alert('Saída confirmada! A vaga agora consta como Livre para outros motoristas. Você ganhou pontos de colaboração.');
+        
+        if (parkedLocation) {
+          fetchSpots(parkedLocation.lat, parkedLocation.lng);
+        }
+      } else {
+        alert('Saída confirmada! Você ganhou pontos de colaboração.');
       }
-    } else if (user && ocupacaoId) {
-      await supabase.from('ocupacoes_publicas')
-        .update({ data_fim: new Date().toISOString() })
-        .eq('id', ocupacaoId);
-      alert('Saída confirmada! Você ganhou pontos de colaboração.');
-    } else {
-      alert('Saída confirmada! Você ganhou pontos de colaboração.');
+    } catch (err: any) {
+      console.error(err.message || 'Erro desconhecido');
     }
-  } catch (err) {
-    console.error(err);
-  }
-  setIsParked(false);
-  setParkedLocation(null);
-  setParkingStartTime(null);
-  setShowExitModal(false);
-  setOcupacaoId(null);
-};
+    setIsParked(false);
+    setParkedLocation(null);
+    setParkingStartTime(null);
+    setShowExitModal(false);
+    setOcupacaoId(null);
+  };
 
   return (
     <div className="relative w-full h-full">
@@ -387,7 +449,7 @@ export default function MapView() {
             setIsLocationManual(false);
           }}
           onError={(e) => {
-            console.error('GeolocateControl error:', e);
+            console.error('GeolocateControl error:', e.message || 'Unknown error');
             setIsLocationManual(true);
           }}
         />
@@ -422,10 +484,30 @@ export default function MapView() {
               setSelectedSpot(spot);
             }}
           >
-            <MapPin 
-              size={36} 
-              className={spot.vagas_disponiveis === 0 ? 'text-gray-500 fill-gray-100 drop-shadow-md' : (spot.tipo === 'publica' ? 'text-emerald-500 fill-emerald-100 drop-shadow-md' : 'text-blue-600 fill-blue-100 drop-shadow-md')} 
-            />
+            {spot.tipo === 'publica' ? (
+              <PublicSpotMarker 
+                spot={spot} 
+                isHovered={hoveredSpot?.id === spot.id} 
+                setHoveredSpot={setHoveredSpot} 
+                setSelectedSpot={setSelectedSpot} 
+              />
+            ) : (
+              <div 
+                className="relative cursor-pointer"
+                onMouseEnter={() => setHoveredSpot(spot)}
+                onMouseLeave={() => setHoveredSpot(null)}
+              >
+                <MapPin 
+                  size={36} 
+                  className={spot.vagas_disponiveis === 0 ? 'text-gray-500 fill-gray-100 drop-shadow-md' : 'text-blue-600 fill-blue-100 drop-shadow-md'} 
+                />
+                {hoveredSpot?.id === spot.id && (
+                   <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#0A192F] text-white px-2 py-1 rounded text-xs font-bold whitespace-nowrap z-10 pointer-events-none drop-shadow-md">
+                     {spot.nome}
+                   </div>
+                )}
+              </div>
+            )}
           </Marker>
         ))}
 

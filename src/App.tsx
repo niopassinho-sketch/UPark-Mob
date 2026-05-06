@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { Map as MapIcon, User, Car, Building, Settings, List } from 'lucide-react';
+import { Map as MapIcon, User, Car, Building, Settings, List, Wallet, ShieldCheck } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import MapView from './components/MapView';
 import ProfileView from './components/ProfileView';
@@ -15,6 +15,8 @@ import GerenciarVagas from './pages/GerenciarVagas';
 import SettingsView from './components/SettingsView';
 import LoginView from './components/LoginView';
 import ReservationsView from './components/ReservationsView';
+import WalletView from './components/WalletView';
+import AdminDashboard from './components/AdminDashboard';
 import { supabase } from './lib/supabase';
 
 // AuthGuard Component
@@ -25,32 +27,20 @@ function PrivateRoute({ children, session }: { children: React.ReactNode, sessio
   return <>{children}</>;
 }
 
-function MainLayout({ session, isOwner }: { session: any, isOwner: boolean }) {
+function MainLayout({ session, isOwner, isAdmin }: { session: any, isOwner: boolean, isAdmin: boolean }) {
   const location = useLocation();
   const isLoginRoute = location.pathname === '/login';
   
   return (
     <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 font-sans">
       <Toaster position="top-center" richColors />
-      {/* Header */}
-      <header className="bg-[#0A192F] dark:bg-slate-950 text-white p-4 shadow-md flex items-center justify-between z-10">
-        <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="UPARK Logo" className="h-8 object-contain" onError={(e) => {
-            // Fallback if logo is missing
-            e.currentTarget.style.display = 'none';
-            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-          }} />
-          <div className="hidden flex items-center gap-2">
-            <Car className="text-[#FFD700]" size={28} />
-            <h1 className="text-xl font-bold tracking-wider">UPARK</h1>
-          </div>
-        </div>
-        {!session && !isLoginRoute && (
-          <NavLink to="/login" className="bg-[#FFD700] text-[#0A192F] px-4 py-2 rounded-lg font-bold text-sm hover:bg-yellow-400 transition-colors">
-            Entrar
-          </NavLink>
-        )}
-      </header>
+
+      {/* Thin Top Header Bar */}
+      {session && !isLoginRoute && (
+        <header className="h-12 bg-[#FFD700] border-b border-[#D4AC0D] flex items-center px-4 z-10">
+          <img src="/logo.png" alt="UPARK Logo" className="h-6 object-contain" />
+        </header>
+      )}
 
       {/* Main Content */}
       <main className="flex-1 relative overflow-hidden">
@@ -98,6 +88,18 @@ function MainLayout({ session, isOwner }: { session: any, isOwner: boolean }) {
                 <SettingsView />
               </PrivateRoute>
             } />
+
+            <Route path="/wallet" element={
+              <PrivateRoute session={session}>
+                <WalletView />
+              </PrivateRoute>
+            } />
+
+            <Route path="/admin" element={
+              <PrivateRoute session={session}>
+                {isAdmin ? <AdminDashboard /> : <Navigate to="/" replace />}
+              </PrivateRoute>
+            } />
           </Routes>
         </AnimatePresence>
       </main>
@@ -128,6 +130,32 @@ function MainLayout({ session, isOwner }: { session: any, isOwner: boolean }) {
               </>
             )}
           </NavLink>
+
+          <NavLink 
+            to="/wallet"
+            className={({ isActive }) => `flex flex-col items-center p-2 flex-1 rounded-xl transition-colors ${isActive ? 'text-[#0A192F] bg-slate-50' : 'text-slate-400'}`}
+          >
+            {({ isActive }) => (
+              <>
+                <Wallet size={24} className={isActive ? 'text-[#FFD700]' : ''} />
+                <span className="text-[10px] mt-1 font-medium">Carteira</span>
+              </>
+            )}
+          </NavLink>
+
+          {isAdmin && (
+            <NavLink 
+              to="/admin"
+              className={({ isActive }) => `flex flex-col items-center p-2 flex-1 rounded-xl transition-colors ${isActive ? 'text-[#0A192F] bg-slate-50' : 'text-slate-400'}`}
+            >
+              {({ isActive }) => (
+                <>
+                  <ShieldCheck size={24} className={isActive ? 'text-[#FFD700]' : ''} />
+                  <span className="text-[10px] mt-1 font-medium">Admin</span>
+                </>
+              )}
+            </NavLink>
+          )}
 
           {(!session || isOwner) && (
             <NavLink 
@@ -176,6 +204,7 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const isDark = localStorage.getItem('theme') === 'dark';
@@ -188,7 +217,7 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
-        checkIfOwner(session.user.id);
+        checkUserRoles(session.user.id);
       } else {
         setLoading(false);
       }
@@ -199,30 +228,37 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
-        checkIfOwner(session.user.id);
+        checkUserRoles(session.user.id);
       } else {
         setIsOwner(false);
+        setIsAdmin(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkIfOwner = async (userId: string) => {
+  const checkUserRoles = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      // Check if owner
+      const { data: ownerData } = await supabase
         .from('vagas_estacionamento')
         .select('id')
         .eq('proprietario_id', userId)
         .limit(1);
         
-      if (data && data.length > 0) {
-        setIsOwner(true);
-      } else {
-        setIsOwner(false);
-      }
-    } catch (err) {
-      console.error(err);
+      setIsOwner(ownerData && ownerData.length > 0);
+
+      // Check if admin
+      const { data: userData } = await supabase
+        .from('usuarios')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      setIsAdmin(userData?.role === 'admin');
+    } catch (err: any) {
+      console.error(err.message || 'Erro ao verificar permissões');
     } finally {
       setLoading(false);
     }
@@ -238,7 +274,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <MainLayout session={session} isOwner={isOwner} />
+      <MainLayout session={session} isOwner={isOwner} isAdmin={isAdmin} />
     </BrowserRouter>
   );
 }

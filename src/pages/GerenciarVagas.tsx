@@ -25,11 +25,10 @@ export default function GerenciarVagas() {
           .eq('proprietario_id', user.id);
           
         if (error) throw error;
-        console.log('Vagas carregadas:', data);
         setSpots(data || []);
       }
-    } catch (error) {
-      console.error('Erro ao carregar vagas:', error);
+    } catch (error: any) {
+      console.error('Erro ao carregar vagas:', error.message || 'Erro desconhecido');
     } finally {
       setLoading(false);
     }
