@@ -3,6 +3,7 @@ import Map, { Marker, Popup, GeolocateControl, Source, Layer } from 'react-map-g
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapPin, Navigation, Clock, ShieldCheck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { gerarCodigoAFA } from '../lib/afaUtils';
 
 import { StatusExpediente } from './StatusExpediente';
 import type { MapRef } from 'react-map-gl/maplibre';
@@ -290,6 +291,9 @@ export default function MapView() {
       
       const nomeMotorista = userData?.nome_completo || 'Desconhecido';
       const infoVeiculo = `${selectedVehicle.marca} ${selectedVehicle.modelo} - ${selectedVehicle.placa}`;
+      const codigoAfa = gerarCodigoAFA(selectedSpot.lat, selectedSpot.lng);
+
+      console.log('Validando codigo_afa antes do RPC:', codigoAfa);
 
       const { data, error } = await supabase.rpc('solicitar_reserva_com_estoque', { 
         p_vaga_id: selectedSpot.id, 
@@ -300,7 +304,8 @@ export default function MapView() {
         p_sem_previsao: noEndTime,
         p_valor_estimado: estimatedTotal,
         p_nome_motorista: nomeMotorista,
-        p_info_veiculo: infoVeiculo
+        p_info_veiculo: infoVeiculo,
+        p_codigo_afa: codigoAfa
       });
       // --- FIM DA ALTERAÇÃO ---
 
@@ -538,6 +543,7 @@ export default function MapView() {
               <h3 className="font-bold text-lg mb-1 text-slate-900">
                 {selectedSpot.tipo === 'publica' ? 'Vaga Pública' : 'Estacionamento Privado'}
               </h3>
+              <p className="text-xs font-mono text-slate-500 mb-2">Código: {gerarCodigoAFA(selectedSpot.lat, selectedSpot.lng)}</p>
               <StatusExpediente esta_aberto={selectedSpot.esta_aberto} />
               <p className="text-sm text-slate-600 mb-1 mt-2">
                 {selectedSpot.tipo === 'publica' ? 'Liberada recentemente' : `R$ ${selectedSpot.preco_hora.toFixed(2)} / hora`}

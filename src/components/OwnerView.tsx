@@ -43,8 +43,25 @@ export default function OwnerView() {
 
   useEffect(() => {
     fetchOwnerData();
-    const interval = setInterval(fetchOwnerData, 10000); // Atualiza a cada 10 segundos
-    return () => clearInterval(interval);
+
+    // Subscribe to real-time changes
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'vagas_estacionamento' },
+        () => fetchOwnerData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservas' },
+        () => fetchOwnerData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const fetchOwnerData = async () => {
@@ -320,7 +337,7 @@ export default function OwnerView() {
         </button>
 
         {showAddForm && (
-          <form onSubmit={handleAddSpot} className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 space-y-4">
+          <form onSubmit={handleAddSpot} className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4 space-y-4 text-[#1c2227]">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Local</label>
               <input required type="text" value={newSpot.nome} onChange={e => setNewSpot({...newSpot, nome: e.target.value})} className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-[#0A192F] focus:border-[#0A192F] outline-none text-slate-900" placeholder="Ex: Estacionamento Central" />

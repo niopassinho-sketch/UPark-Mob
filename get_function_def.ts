@@ -7,7 +7,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function getFunctionDefinition() {
   const { data, error } = await supabase
-    .rpc('get_function_def', { p_func_name: 'solicitar_reserva_com_estoque' });
+    .rpc('get_function_def', { p_func_name: 'get_vagas_com_coordenadas' });
     
   if (error) {
     console.error('Erro ao buscar definição da função:', error);

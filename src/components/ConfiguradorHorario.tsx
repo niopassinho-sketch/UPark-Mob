@@ -90,7 +90,7 @@ export const ConfiguradorHorario = ({ vagaId }: Props) => {
       <h2 className="text-xl font-bold mb-6">Horário de Funcionamento</h2>
       <div className="space-y-4">
         {horarios.map((h, index) => (
-          <div key={h.dia_semana} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+          <div key={h.dia_semana} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg text-[#1c2227]">
             <span className="w-24 font-medium">{DIAS_SEMANA[index]}</span>
             <input
               type="time"
@@ -99,7 +99,7 @@ export const ConfiguradorHorario = ({ vagaId }: Props) => {
               onChange={(e) => handleUpdate(index, 'abertura', e.target.value)}
               className="p-2 border rounded-md disabled:opacity-50"
             />
-            <span className="text-gray-400">às</span>
+            <span className="text-gray-500">às</span>
             <input
               type="time"
               value={h.fechamento}
@@ -107,7 +107,7 @@ export const ConfiguradorHorario = ({ vagaId }: Props) => {
               onChange={(e) => handleUpdate(index, 'fechamento', e.target.value)}
               className="p-2 border rounded-md disabled:opacity-50"
             />
-            <label className="flex items-center gap-2 ml-auto">
+            <label className="flex items-center gap-2 ml-auto cursor-pointer">
               <input
                 type="checkbox"
                 checked={h.fechado}
