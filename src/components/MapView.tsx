@@ -230,17 +230,49 @@ export default function MapView() {
   }, []);
 
   const fetchSpots = async (lat: number, lng: number) => {
-    const { data, error } = await supabase
-      .rpc('get_vagas_com_coordenadas', { p_lat: lat, p_lng: lng });
+    console.log('DEBUG: Fetching spots directly with lat:', lat, 'lng:', lng);
     
-    console.log('DEBUG EXPEDIENTE UPARK:', data, error);
+    // Direct query instead of using the broken RPC
+    const { data, error } = await supabase
+      .from('vagas_estacionamento')
+      .select('*'); 
+    
+    console.log('DEBUG EXPEDIENTE UPARK (direct):', data, error);
 
     if (error) {
-      console.error('Erro ao buscar vagas:', error);
+      console.error('Erro ao buscar vagas diretamente:', error);
       return;
     }
 
-    setSpots(data || []);
+    // Process spots to extract lat/lng from localizacao string (PostGIS WKB)
+    const processedSpots = (data || []).map(spot => {
+        let latitude = 0;
+        let longitude = 0;
+        
+        if (typeof spot.localizacao === 'string') {
+            try {
+                // Manually parse hex string to Uint8Array
+                const hex = spot.localizacao;
+                const bytes = new Uint8Array(hex.length / 2);
+                for (let i = 0; i < hex.length; i += 2) {
+                    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+                }
+                
+                const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                
+                // WKB Header: 1 byte (endian), 4 bytes (type), 4 bytes (srid = 4326)
+                // Offset 9: X, Offset 17: Y
+                const isLittleEndian = bytes[0] === 1;
+                longitude = view.getFloat64(9, isLittleEndian);
+                latitude = view.getFloat64(17, isLittleEndian);
+            } catch (e) {
+                console.error("Erro ao parsear WKB:", e);
+            }
+        }
+        return { ...spot, lat: latitude, lng: longitude };
+    });
+
+    setSpots(processedSpots);
   };
 
   const handleReserve = async () => {
@@ -440,7 +472,7 @@ export default function MapView() {
         {...viewState}
         onMove={evt => setViewState(evt.viewState)}
         onMoveEnd={() => fetchSpots(viewState.latitude, viewState.longitude)}
-        mapStyle="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"
+        mapStyle="https://tiles.openfreemap.org/styles/bright"
         style={{ width: '100%', height: '100%', zIndex: 0 }}
       >
         {routeData && (
