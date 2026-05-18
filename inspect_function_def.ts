@@ -8,7 +8,7 @@ async function inspectFunction() {
   const { data, error } = await supabase
     .from('information_schema.routines')
     .select('routine_definition')
-    .eq('routine_name', 'get_vagas_com_coordenadas')
+    .eq('routine_name', 'registrar_vaga_publica')
     .single();
 
   if (error) {

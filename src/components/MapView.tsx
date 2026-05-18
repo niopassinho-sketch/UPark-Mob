@@ -264,6 +264,11 @@ export default function MapView() {
     }
   }, [startTime, endTime, noEndTime, reservationStep, selectedSpot]);
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const confirmReserve = async () => {
     console.log('Veículo selecionado:', selectedVehicle?.id);
     console.log('Vaga alvo para reserva:', selectedSpot?.id);
@@ -307,7 +312,8 @@ export default function MapView() {
         p_info_veiculo: infoVeiculo,
         p_codigo_afa: codigoAfa
       });
-      // --- FIM DA ALTERAÇÃO ---
+
+      if (!mountedRef.current) return;
 
       if (error) {
         console.error('Erro detalhado do RPC:', error);
@@ -336,10 +342,11 @@ export default function MapView() {
         alert(result.mensagem || 'Erro ao realizar reserva.');
       }
     } catch (err) {
+      if (!mountedRef.current) return;
       console.error('Erro inesperado na reserva:', err);
       alert('Erro inesperado ao realizar reserva: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
-      setIsReserving(false);
+      if (mountedRef.current) setIsReserving(false);
     }
   };
 

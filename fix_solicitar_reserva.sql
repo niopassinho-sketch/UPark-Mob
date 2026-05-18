@@ -35,11 +35,10 @@ DECLARE
     v_vaga_record RECORD;
     v_reserva_id UUID;
 BEGIN
-    -- [LOCK] Bloqueia a linha da vaga para garantir atomicidade
+    -- [LOCK] Verificação de disponibilidade
     SELECT * INTO v_vaga_record 
     FROM public.vagas_estacionamento 
-    WHERE id = p_vaga_id 
-    FOR UPDATE;
+    WHERE id = p_vaga_id;
 
     -- [VALIDAÇÃO] Vaga não encontrada
     IF NOT FOUND THEN
@@ -73,18 +72,14 @@ BEGIN
         p_valor_estimado,
         p_nome_motorista,
         p_info_veiculo,
-        'confirmada'
+        'pendente'
     ) RETURNING id INTO v_reserva_id;
 
-    -- [ATUALIZAÇÃO] Decremento seguro do estoque
-    UPDATE public.vagas_estacionamento 
-    SET vagas_disponiveis = vagas_disponiveis - 1,
-        status_ocupacao = CASE WHEN (vagas_disponiveis - 1) <= 0 THEN 'lotado' ELSE 'livre' END,
-        codigo_afa = COALESCE(p_codigo_afa, codigo_afa)
-    WHERE id = p_vaga_id;
+    -- [ATUALIZAÇÃO] O estoque só deve ser abatido quando o proprietário confirmar.
+    -- UPDATE public.vagas_estacionamento ... (REMOVIDO)
 
     -- [RETORNO] Resposta JSON estruturada
-    RETURN json_build_object('sucesso', true, 'reserva_id', v_reserva_id, 'mensagem', 'Reserva confirmada!');
+    RETURN json_build_object('sucesso', true, 'reserva_id', v_reserva_id, 'mensagem', 'Solicitação pendente de aprovação!');
 
 EXCEPTION
     WHEN OTHERS THEN
