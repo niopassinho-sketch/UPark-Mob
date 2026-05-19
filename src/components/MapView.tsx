@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { MapPin, Navigation, Clock, ShieldCheck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { gerarCodigoAFA } from '../lib/afaUtils';
+import { PublicSpotMarker } from './PublicSpotMarker';
 
 import { StatusExpediente } from './StatusExpediente';
 import type { MapRef } from 'react-map-gl/maplibre';
@@ -17,8 +18,8 @@ function formatElapsedTime(timestamp: string) {
   return `${diffInHours}h`;
 }
 
-// PublicSpotMarker component
-const PublicSpotMarker = ({ spot, isHovered, setHoveredSpot, setSelectedSpot }: any) => {
+// PublicSpotMarker component (Deprecated)
+const InternalOldMarker = ({ spot, isHovered, setHoveredSpot, setSelectedSpot }: any) => {
   let colorClass = "text-gray-500 fill-gray-100"; // indefinida
   if (spot.status_ocupacao === 'livre') colorClass = "text-emerald-500 fill-emerald-100";
   else if (spot.status_ocupacao === 'lotado') colorClass = "text-red-500 fill-red-100";
@@ -230,7 +231,7 @@ export default function MapView() {
   }, []);
 
   const fetchSpots = async (lat: number, lng: number) => {
-    console.log('DEBUG: Fetching spots directly with lat:', lat, 'lng:', lng);
+    console.log("UPARK_DEBUG: Capturando geolocalização bruta do motorista", { lat, lng });
     
     // Direct query instead of using the broken RPC
     const { data, error } = await supabase
@@ -531,9 +532,7 @@ export default function MapView() {
             {spot.tipo === 'publica' ? (
               <PublicSpotMarker 
                 spot={spot} 
-                isHovered={hoveredSpot?.id === spot.id} 
-                setHoveredSpot={setHoveredSpot} 
-                setSelectedSpot={setSelectedSpot} 
+                onParkHere={handleParkHere}
               />
             ) : (
               <div 
