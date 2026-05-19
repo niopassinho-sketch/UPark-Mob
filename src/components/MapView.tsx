@@ -392,30 +392,31 @@ export default function MapView() {
     try {
       const user = (await supabase.auth.getUser()).data.user;
       if (user) {
-        const { data, error } = await supabase.rpc('registrar_vaga_publica', {
+        const codigoAfa = gerarCodigoAFA(loc.lat, loc.lng);
+        console.log("UPARK_DEBUG: Capturando geolocalização bruta do motorista", { lat: loc.lat, lng: loc.lng });
+
+        const { data, error } = await supabase.rpc('registrar_estacionamento_publico', {
           p_lat: loc.lat,
           p_lng: loc.lng,
-          p_usuario_id: user.id
+          p_codigo_afa: codigoAfa
         });
         
         if (error) {
            console.error("Erro ao registrar vaga pública:", error);
-           alert("Erro ao registrar vaga pública.");
+           alert("Erro ao registrar vaga pública: " + error.message);
            setIsParked(false);
            return;
         }
 
-        if (data && data.vaga_id) {
-           setOcupacaoId(data.vaga_id); 
-        }
-        
-        alert('Estacionamento público registrado! Você está colaborando com a rede e a vaga agora consta como ocupada.');
+        alert('Estacionamento público registrado! Você está colaborando com a rede.');
         fetchSpots(loc.lat, loc.lng); // Refresh map
       } else {
         alert('Você precisa estar logado para colaborar e registrar o estacionamento.');
+        setIsParked(false);
       }
     } catch (e: any) {
       console.error("Erro inesperado:", e.message || 'Erro desconhecido');
+      alert("Erro inesperado: " + e.message);
       setIsParked(false);
     }
   };

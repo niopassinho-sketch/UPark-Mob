@@ -2,10 +2,6 @@
 ALTER TABLE public.vagas_estacionamento
   ADD COLUMN IF NOT EXISTS codigo_afa VARCHAR;
 
--- Assumindo que status_ocupacao seja um tipo enum, adicionando valor
--- Caso seja texto livre, basta validar no código.
--- ALTER TYPE status_ocupacao_enum ADD VALUE IF NOT EXISTS 'indefinida'; 
-
 -- 2. Função de Registro Público (RPC)
 CREATE OR REPLACE FUNCTION public.registrar_estacionamento_publico(
     p_lat double precision, 
@@ -18,12 +14,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.vagas_estacionamento WHERE codigo_afa = p_codigo_afa) THEN
     UPDATE public.vagas_estacionamento
     SET status_ocupacao = 'ocupada',
+        vagas_disponiveis = 0,
         ultima_atualizacao = now()
     WHERE codigo_afa = p_codigo_afa;
   ELSE
     -- Caso contrário, insere nova vaga pública
     INSERT INTO public.vagas_estacionamento (
-        nome, tipo, status_ocupacao, codigo_afa, localizacao, ultima_atualizacao
+        nome, tipo, status_ocupacao, codigo_afa, localizacao, ultima_atualizacao,
+        endereco, capacidade_total, preco_hora, vagas_totais, vagas_disponiveis, esta_aberto
     )
     VALUES (
         'Vaga Pública - ' || p_codigo_afa, 
@@ -31,7 +29,9 @@ BEGIN
         'ocupada', 
         p_codigo_afa, 
         ST_SetSRID(ST_MakePoint(p_lng, p_lat), 4326), 
-        now()
+        now(),
+        'Localização via Código AFA: ' || p_codigo_afa,
+        1, 0, 1, 0, true
     );
   END IF;
 END;
@@ -41,6 +41,7 @@ $$ LANGUAGE plpgsql;
 -- UPDATE status para 'indefinida' diariamente às 00:00
 SELECT cron.schedule('reset-vagas-publicas', '0 0 * * *', $$
   UPDATE public.vagas_estacionamento 
-  SET status_ocupacao = 'indefinida' 
+  SET status_ocupacao = 'indefinida',
+      vagas_disponiveis = vagas_totais
   WHERE tipo = 'publica';
 $$);
