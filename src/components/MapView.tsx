@@ -68,6 +68,28 @@ export default function MapView() {
   const [parkedLocation, setParkedLocation] = useState<{lat: number, lng: number} | null>(null);
   const [parkingStartTime, setParkingStartTime] = useState<number | null>(null);
   const [showExitModal, setShowExitModal] = useState(false);
+  // Track the ID of the parking spot if parking publicly
+  const [activePublicSpotId, setActivePublicSpotId] = useState<string | null>(null);
+
+  // Load user status
+  useEffect(() => {
+    async function checkUserStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: userData } = await supabase
+          .from('usuarios')
+          .select('vaga_atual_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (userData?.vaga_atual_id) {
+          setIsParked(true);
+          setActivePublicSpotId(userData.vaga_atual_id);
+        }
+      }
+    }
+    checkUserStatus();
+  }, []);
   const [manualAddress, setManualAddress] = useState('');
   const [ocupacaoId, setOcupacaoId] = useState<number | null>(null);
   const [userVehicles, setUserVehicles] = useState<any[]>([]);
@@ -85,6 +107,31 @@ export default function MapView() {
   const [navigationTarget, setNavigationTarget] = useState<any>(null);
   const [routeData, setRouteData] = useState<any>(null);
   const [navigationInfo, setNavigationInfo] = useState<{eta: string, distance: string} | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const watchId = useRef<number | null>(null);
+
+  const startLiveNavigation = useCallback(() => {
+    setIsNavigating(true);
+    if ("geolocation" in navigator) {
+        watchId.current = navigator.geolocation.watchPosition(
+            (pos) => {
+                const newLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                setUserLocation(newLoc);
+                console.log("UPARK_DEBUG: Atualização em tempo real:", newLoc);
+            },
+            (err) => console.error("Erro no rastreamento:", err),
+            { enableHighAccuracy: true }
+        );
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+        if (watchId.current !== null) {
+            navigator.geolocation.clearWatch(watchId.current);
+        }
+    }
+  }, []);
 
   const fetchUserVehicles = async (userId: string) => {
     const { data, error } = await supabase
@@ -232,19 +279,19 @@ export default function MapView() {
 
   const fetchSpots = async (lat: number, lng: number) => {
     console.log("UPARK_DEBUG: Capturando geolocalização bruta do motorista", { lat, lng });
+    console.log("UPARK_DEBUG: URL Supabase:", import.meta.env.VITE_SUPABASE_URL);
     
     // Direct query instead of using the broken RPC
     const { data, error } = await supabase
       .from('vagas_estacionamento')
       .select('*'); 
     
-    console.log('DEBUG EXPEDIENTE UPARK (direct):', data, error);
-
     if (error) {
       console.error('Erro ao buscar vagas diretamente:', error);
+      alert('Erro ao buscar vagas (verifique console): ' + error.message);
       return;
     }
-
+    
     // Process spots to extract lat/lng from localizacao string (PostGIS WKB)
     const processedSpots = (data || []).map(spot => {
         let latitude = 0;
@@ -384,34 +431,39 @@ export default function MapView() {
   };
 
   const handleParkHere = async () => {
-    setIsParked(true);
     const loc = userLocation || { lat: viewState.latitude, lng: viewState.longitude };
-    setParkedLocation(loc);
-    setParkingStartTime(Date.now());
-    
+    console.log("UPARK_DEBUG: Capturando geolocalização bruta do motorista", { lat: loc.lat, lng: loc.lng });
+
     try {
       const user = (await supabase.auth.getUser()).data.user;
       if (user) {
         const codigoAfa = gerarCodigoAFA(loc.lat, loc.lng);
-        console.log("UPARK_DEBUG: Capturando geolocalização bruta do motorista", { lat: loc.lat, lng: loc.lng });
 
         const { data, error } = await supabase.rpc('registrar_estacionamento_publico', {
           p_lat: loc.lat,
           p_lng: loc.lng,
-          p_codigo_afa: codigoAfa
+          p_codigo_afa: codigoAfa,
+          p_usuario_id: user.id
         });
         
         if (error) {
            console.error("Erro ao registrar vaga pública:", error);
-           alert("Erro ao registrar vaga pública: " + error.message);
+           if (error.code === 'PGRST100') { 
+              alert("Erro: Você já possui uma vaga ativa ou local proibido.");
+           } else {
+              alert("Erro ao registrar vaga pública: " + error.message);
+           }
            setIsParked(false);
            return;
         }
 
-        alert('Estacionamento público registrado! Você está colaborando com a rede.');
+        alert('Estacionamento público registrado! Você estaciuonou e está colaborando.');
+        setIsParked(true);
+        setActivePublicSpotId(codigoAfa); // Simplified for now
+        setParkedLocation(loc);
         fetchSpots(loc.lat, loc.lng); // Refresh map
       } else {
-        alert('Você precisa estar logado para colaborar e registrar o estacionamento.');
+        alert('Você precisa estar logado.');
         setIsParked(false);
       }
     } catch (e: any) {
@@ -422,38 +474,36 @@ export default function MapView() {
   };
 
   const handleLeave = async () => {
+    console.log("UPARK_DEBUG: Capturando geolocalização bruta do motorista (Saída)", { lat: userLocation?.lat, lng: userLocation?.lng });
     try {
       const user = (await supabase.auth.getUser()).data.user;
-      if (selectedSpot && user && selectedSpot.tipo !== 'publica') {
-        const { data } = await supabase.rpc('confirmar_saida_com_recompensa', { 
-          p_vaga_id: selectedSpot.id,
-          p_usuario_id: user.id
-        });
-        if (data && data[0]) {
-          alert(data[0].mensagem);
-          localStorage.setItem('points_earned', '10');
-        }
-      } else if (user && ocupacaoId) {
-        // Free the public spot
-        await supabase.rpc('liberar_vaga_publica', {
-          p_vaga_id: ocupacaoId
-        });
-        alert('Saída confirmada! A vaga agora consta como Livre para outros motoristas. Você ganhou pontos de colaboração.');
-        
-        if (parkedLocation) {
-          fetchSpots(parkedLocation.lat, parkedLocation.lng);
-        }
-      } else {
-        alert('Saída confirmada! Você ganhou pontos de colaboração.');
+      if (!user) return;
+
+      const { error } = await supabase.rpc('confirmar_saida_publica', { 
+        p_usuario_id: user.id
+      });
+      
+      if (error) {
+        console.error("Erro ao confirmar saída:", error);
+        alert("Erro ao confirmar saída: " + error.message);
+        return;
       }
+      
+      alert('Saída confirmada! A vaga agora consta como Livre. Obrigado por colaborar.');
+        
+      if (parkedLocation) {
+        fetchSpots(parkedLocation.lat, parkedLocation.lng);
+      }
+      
+      setIsParked(false);
+      setActivePublicSpotId(null);
+      setParkedLocation(null);
+      setParkingStartTime(null);
+      setShowExitModal(false);
     } catch (err: any) {
       console.error(err.message || 'Erro desconhecido');
+      alert("Erro ao confirmar saída da vaga.");
     }
-    setIsParked(false);
-    setParkedLocation(null);
-    setParkingStartTime(null);
-    setShowExitModal(false);
-    setOcupacaoId(null);
   };
 
   return (
@@ -464,9 +514,16 @@ export default function MapView() {
             <p className="text-sm text-slate-500">Tempo estimado: <span className="font-bold text-slate-900">{navigationInfo.eta}</span></p>
             <p className="text-sm text-slate-500">Distância: <span className="font-bold text-slate-900">{navigationInfo.distance}</span></p>
           </div>
-          <button onClick={stopNavigation} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
-            <X size={20} />
-          </button>
+          <div className="flex gap-2">
+            {!isNavigating && (
+              <button onClick={startLiveNavigation} className="p-2 bg-emerald-100 text-emerald-800 rounded-full hover:bg-emerald-200 font-bold text-xs uppercase">
+                Iniciar Rota
+              </button>
+            )}
+            <button onClick={stopNavigation} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
+              <X size={20} />
+            </button>
+          </div>
         </div>
       )}
       <Map

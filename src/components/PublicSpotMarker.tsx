@@ -41,15 +41,23 @@ export const PublicSpotMarker: React.FC<PublicSpotMarkerProps> = ({ spot, onPark
         <Popup longitude={spot.lng} latitude={spot.lat} onClose={() => setShowPopup(false)}>
           <div className="p-2">
             <h3 className="font-bold">{spot.nome}</h3>
-            {spot.status_ocupacao === 'livre' && (
-              <p className="text-sm">Livre há {diffMinutes} min</p>
+            
+            {spot.status_ocupacao === 'ocupada' ? (
+              <p className="text-sm font-semibold text-red-600">Vaga Pública Ocupada</p>
+            ) : (
+              <p className="text-sm font-semibold text-green-600">
+                Vaga Pública Livre - Liberada há {diffMinutes} min
+              </p>
             )}
+            
             <p className="text-xs text-gray-500 mt-2">Não é possível garantir que a vaga ainda esteja livre</p>
+            <p className="text-xs font-mono text-gray-400 mt-1">Código: {Math.random().toString(36).substring(7).toUpperCase()}</p>
+            
             <button 
               className="mt-2 bg-blue-500 text-white p-1 rounded text-sm w-full"
-              onClick={() => onParkHere(spot)}
+              onClick={() => { setShowPopup(false); onParkHere(spot); }}
             >
-              Estacionei Aqui
+              Como chegar / Estacionei Aqui
             </button>
           </div>
         </Popup>
